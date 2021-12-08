@@ -1,0 +1,104 @@
+* 什么是pin, 有什么用
+
+  pin是intel提供的二进制插桩工具, 可以帮助我们对二进制进行插桩分析
+
+ 
+* Intrumentation
+  
+  pin有四种粒度的插桩模式, 分别是
+
+  - instruction
+  - trace
+  - routine
+  - image
+
+
+  分别对应instruction, basic block, function, program
+
+  这里有个很好的定义: BBL是指单一入口, 单一出口的指令序列
+
+ 
+* Example
+
+  以Pin-3.11为例, 在Windows上推荐使用VS2021编译, 在Linux上使用make编译, 
+
+  在Linux上比较简单, 直接用make编译即可, 如下
+
+  #+BEGIN_SRC shell
+	cd source/tools/ManualExamples
+	make all TARGET=intel64
+  #+END_SRC
+
+  或者编译单个文件
+
+  #+BEGIN_SRC shell
+	cd source/tools/ManualExamples
+	make inscount0.test TARGET=intel64
+  #+END_SRC
+
+  在Windows上稍微复杂一点, 需要将MyPinTool中的代码替换为ManualExample的代码(因为MyPinTool有VS相关设置), 然后构建即可
+
+  构建完pintool后, 使用方式如下:
+
+  #+BEGIN_SRC shell
+  pin -t <pintool> -- <target>
+  #+END_SRC
+
+  
+* 代码模板
+
+  #+BEGIN_SRC C++
+	#include <iostream>
+	#include <fstream>
+	#include "pin.H"
+
+	using std::cerr
+	using std::ofstream
+	using std::ios
+	using std::string
+	using std::endl
+
+	ofstream OutFile
+
+	static UINT64 icount = 0;
+
+	KNOB<string> KnobOutputFile(KNOB_MODE_WRITEONCE, "pintool",
+					"o", "inscount.out", "specify output file name");
+
+	VOID docount() {
+	  icount ++;
+	}
+
+	VOID Instruction(INS ins, VOID *v) {
+	  INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR)docount, IARG_END);
+	}
+
+	VOID Fini(INT32 code, VOID *v) {
+	  OutFile.setf(ios::showbase);
+	  OutFile << "Count " << icount << endl;
+	  OutFile.close();
+	}
+
+	INT32 Usage() {
+	  cerr << "This tool counts the number of dynamic instructions executed" << endl;
+	  cerr << endl << KNOB_BASE::StringKnobSummary() << endl;
+	  return -1;    
+	}
+
+	int main(int argc, char *argv[]) {
+	  if (PIN_Init(argc, argv)) return Usage(); 
+
+	  OutFile.open(KnobOutputFile.Value().c_str());
+
+	  INS_AddInstrumentFunction(Instruction, 0);
+
+	  PIN_AddFinitFunction(Fini, 0);
+
+	  PIN_StartProgram();
+
+	  return 0;
+	}
+  #+END_SRC
+  
+ 
+
